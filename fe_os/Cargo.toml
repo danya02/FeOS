@@ -1,0 +1,15 @@
+[package]
+name = "fe_os"
+version = "0.1.0"
+authors = ["Danya Generalov <danya@danya02.ru>"]
+edition = "2018"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[dependencies]
+
+bootloader = "0.6.4"
