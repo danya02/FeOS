@@ -74,7 +74,7 @@ struct Buffer {
 /// `core::fmt::Write` trait.
 pub struct Writer {
     column_position: usize,
-    color_code: ColorCode,
+    pub color_code: ColorCode,
     buffer: &'static mut Buffer,
 }
 
