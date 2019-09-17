@@ -28,15 +28,12 @@ static HELLO : &str = "This is a test string, Hello x86_64!";
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     fe_os::init();
+    loop {print!("-"); for _ in 0..1000000{}}
     for i in HELLO.bytes() {
         if vga_buffer::WRITER.lock().color_code == *BLACK_ON_WHITE { vga_buffer::WRITER.lock().color_code = *WHITE_ON_BLACK; } else {vga_buffer::WRITER.lock().color_code = *BLACK_ON_WHITE; }
         vga_buffer::WRITER.lock().write_byte(i);
     }
     
-    fn stack_overflow() { stack_overflow(); }
-
-    stack_overflow();
-
-    assert_eq!(0,1);
     loop {}
+
 }
