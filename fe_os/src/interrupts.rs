@@ -4,7 +4,7 @@
 // problem we skip compilation of this module on Windows.
 #![cfg(not(windows))]
 
-use crate::{gdt, println, print};
+use crate::{gdt, println, print, hlt_loop};
 use lazy_static::lazy_static;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
@@ -63,7 +63,7 @@ extern "x86-interrupt" fn double_fault_handler(
     _error_code: u64,
 ) {
     println!("EXCEPTION: DOUBLE FAULT\n{:#?}", stack_frame);
-    loop {}
+    hlt_loop();
 }
 
 extern "x86-interrupt" fn timer_interrupt_handler(stack_frame: &mut InterruptStackFrame) {
