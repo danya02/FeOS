@@ -10,6 +10,7 @@ use pic8259_simple::ChainedPics;
 use spin;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
+
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 
@@ -85,9 +86,11 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: &mut InterruptSt
             .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
     }
 }
+use pc_keyboard::DecodedKey;
+pub static mut KEYPRESS_HANDLER: fn(DecodedKey) -> () = |_x: DecodedKey| {}; 
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
-    use pc_keyboard::{layouts, DecodedKey, Keyboard, ScancodeSet1};
+    use pc_keyboard::{layouts, Keyboard, ScancodeSet1};
     use spin::Mutex;
     use x86_64::instructions::port::Port;
 
@@ -102,10 +105,11 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut Interrup
     let scancode: u8 = unsafe { port.read() };
     if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
         if let Some(key) = keyboard.process_keyevent(key_event) {
-            match key {
-                DecodedKey::Unicode(character) => print!("{}", character),
-                DecodedKey::RawKey(key) => print!("{:?}", key),
-            }
+            unsafe {KEYPRESS_HANDLER(key);}
+            //match key {
+            //    DecodedKey::Unicode(character) => print!("{}", character),
+            //    DecodedKey::RawKey(key) => print!("{:?}", key),
+            //}
         }
     }
 

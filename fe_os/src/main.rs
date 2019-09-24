@@ -7,11 +7,19 @@
 extern crate alloc;
 
 use alloc::{boxed::Box, rc::Rc, vec, vec::Vec};
-use fe_os::println;
+use fe_os::{println,print};
 use bootloader::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 
 entry_point!(kernel_main);
+
+use pc_keyboard::DecodedKey; 
+
+fn keypress_handler(key: DecodedKey) {
+    print!("{:?}", key);
+}
+
+use fe_os::interrupts;
 
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
     use fe_os::allocator;
@@ -20,6 +28,13 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     println!("Hello World{}", "!");
     fe_os::init();
+
+
+    unsafe {
+        interrupts::KEYPRESS_HANDLER = keypress_handler;
+    }
+
+    println!("Boot info: {:?}", boot_info);
 
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
     let mut mapper = unsafe { memory::init(phys_mem_offset) };
