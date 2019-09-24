@@ -3,14 +3,16 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 use volatile::Volatile;
 
+#[cfg(test)]
+use crate::{serial_print, serial_println};
+
 lazy_static! {
     /// A global `Writer` instance that can be used for printing to the VGA text buffer.
     ///
     /// Used by the `print!` and `println!` macros.
     pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
-        cursor_row: 0,
-        cursor_col: 0,
-        color_code: ColorCode::new(Color::LightRed, Color::Black),
+        column_position: 0,
+        color_code: ColorCode::new(Color::Yellow, Color::Black),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
     });
 }
@@ -41,11 +43,11 @@ pub enum Color {
 /// A combination of a foreground and a background color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct ColorCode(u8);
+struct ColorCode(u8);
 
 impl ColorCode {
     /// Create a new `ColorCode` with the given foreground and background colors.
-    pub fn new(foreground: Color, background: Color) -> ColorCode {
+    fn new(foreground: Color, background: Color) -> ColorCode {
         ColorCode((background as u8) << 4 | (foreground as u8))
     }
 }
@@ -74,10 +76,9 @@ struct Buffer {
 /// Wraps lines at `BUFFER_WIDTH`. Supports newline characters and implements the
 /// `core::fmt::Write` trait.
 pub struct Writer {
-    pub color_code: ColorCode,
+    column_position: usize,
+    color_code: ColorCode,
     buffer: &'static mut Buffer,
-    cursor_col: usize,
-    cursor_row: usize,
 }
 
 impl Writer {
@@ -88,17 +89,19 @@ impl Writer {
         match byte {
             b'\n' => self.new_line(),
             byte => {
-                if self.cursor_col >= BUFFER_WIDTH {
+                if self.column_position >= BUFFER_WIDTH {
                     self.new_line();
                 }
 
+                let row = BUFFER_HEIGHT - 1;
+                let col = self.column_position;
 
                 let color_code = self.color_code;
-                self.buffer.chars[self.cursor_row][self.cursor_col].write(ScreenChar {
+                self.buffer.chars[row][col].write(ScreenChar {
                     ascii_character: byte,
-                    color_code: self.color_code,
+                    color_code,
                 });
-                self.cursor_col += 1;
+                self.column_position += 1;
             }
         }
     }
@@ -108,7 +111,7 @@ impl Writer {
     /// Wraps lines at `BUFFER_WIDTH`. Supports the `\n` newline character. Does **not**
     /// support strings with non-ASCII characters, since they can't be printed in the VGA text
     /// mode.
-    pub fn write_string(&mut self, s: &str) {
+    fn write_string(&mut self, s: &str) {
         for byte in s.bytes() {
             match byte {
                 // printable ASCII byte or newline
@@ -119,37 +122,16 @@ impl Writer {
         }
     }
 
-
-
     /// Shifts all lines one line up and clears the last row.
     fn new_line(&mut self) {
-        self.cursor_col = 0;
-        self.cursor_row += 1;
-        if self.cursor_row >= BUFFER_HEIGHT {
-            self.cursor_row = BUFFER_HEIGHT - 1;
-            for row in 1..BUFFER_HEIGHT {
-                for col in 0..BUFFER_WIDTH {
-                    let character = self.buffer.chars[row][col].read();
-                    self.buffer.chars[row - 1][col].write(character);
-                }
-            }
-            self.clear_row(BUFFER_HEIGHT - 1);
-        }
-    }
-    /// Clears the entire screen by overwriting it with blank characters and setting the cursor to
-    /// its default position.
-    pub fn clear_screen(&mut self) {
-        let blank = ScreenChar {
-            ascii_character: b' ',
-            color_code: self.color_code,
-        };
-        for row in 0..BUFFER_HEIGHT {
+        for row in 1..BUFFER_HEIGHT {
             for col in 0..BUFFER_WIDTH {
-                self.buffer.chars[row][col].write(blank);
+                let character = self.buffer.chars[row][col].read();
+                self.buffer.chars[row - 1][col].write(character);
             }
         }
-        self.cursor_row=0;
-        self.cursor_col=0;
+        self.clear_row(BUFFER_HEIGHT - 1);
+        self.column_position = 0;
     }
 
     /// Clears a row by overwriting it with blank characters.
@@ -184,13 +166,50 @@ macro_rules! println {
     ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
 }
 
-/// Prints the given formatted string to the VGA text buffer through the global `WRITER` instance.
+/// Prints the given formatted string to the VGA text buffer
+/// through the global `WRITER` instance.
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
     use x86_64::instructions::interrupts;
+
     interrupts::without_interrupts(|| {
         WRITER.lock().write_fmt(args).unwrap();
     });
 }
 
+#[test_case]
+fn test_println_simple() {
+    serial_print!("test_println... ");
+    println!("test_println_simple output");
+    serial_println!("[ok]");
+}
+
+#[test_case]
+fn test_println_many() {
+    serial_print!("test_println_many... ");
+    for _ in 0..200 {
+        println!("test_println_many output");
+    }
+    serial_println!("[ok]");
+}
+
+#[test_case]
+fn test_println_output() {
+    use core::fmt::Write;
+    use x86_64::instructions::interrupts;
+
+    serial_print!("test_println_output... ");
+
+    let s = "Some test string that fits on a single line";
+    interrupts::without_interrupts(|| {
+        let mut writer = WRITER.lock();
+        writeln!(writer, "\n{}", s).expect("writeln failed");
+        for (i, c) in s.chars().enumerate() {
+            let screen_char = writer.buffer.chars[BUFFER_HEIGHT - 2][i].read();
+            assert_eq!(char::from(screen_char.ascii_character), c);
+        }
+    });
+
+    serial_println!("[ok]");
+}
