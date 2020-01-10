@@ -10,6 +10,7 @@ use pic8259_simple::ChainedPics;
 use spin;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
+use x86_64::instructions::port::PortWriteOnly;
 
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
@@ -79,13 +80,64 @@ extern "x86-interrupt" fn double_fault_handler(
     hlt_loop();
 }
 
+pub static mut TIMER_HANDLER: fn() -> () = | | {};
+
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
     print!(".");
+    unsafe{ TIMER_HANDLER(); }
     unsafe {
         PICS.lock()
             .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
     }
 }
+
+
+const TIMER_CMD_PORT: u16 = 0x43;
+const TIMER_CH0_PORT: u16 = 0x40;
+const TIMER_CH2_PORT: u16 = 0x42;
+
+const TIMER_CH0_SET_CMD: u8 = 0b00110110;
+const TIMER_CH2_SET_CMD: u8 = 0b10110110;
+
+pub struct Frequency {
+    high: u8,
+    low: u8,
+}
+
+impl Frequency {
+    pub fn from_countdown(val: u16) -> Frequency {
+        let hi = (val / 256) as u8;
+        let lo = (val % 256) as u8;
+        Frequency {high: hi, low: lo}
+    }
+
+    pub fn from_freq(val: u32) -> Frequency {
+        let countdown = (1193180 / val) as u16;
+        Frequency::from_countdown(countdown)
+    }
+}
+
+pub fn timer0_write_freq(val: Frequency) {
+    let mut freq_conf_begin = PortWriteOnly::<u8>::new(TIMER_CMD_PORT);
+    let mut freq_conf_val = PortWriteOnly::<u8>::new(TIMER_CH0_PORT);
+    unsafe {
+        freq_conf_begin.write(TIMER_CH0_SET_CMD);
+        freq_conf_val.write(val.low);
+        freq_conf_val.write(val.high);
+    }
+}
+
+pub fn timer2_write_freq(val: Frequency) {
+    let mut freq_conf_begin = PortWriteOnly::<u8>::new(TIMER_CMD_PORT);
+    let mut freq_conf_val = PortWriteOnly::<u8>::new(TIMER_CH2_PORT);
+    unsafe {
+        freq_conf_begin.write(TIMER_CH2_SET_CMD);
+        freq_conf_val.write(val.low);
+        freq_conf_val.write(val.high);
+    }
+}
+
+
 use pc_keyboard::DecodedKey;
 pub static mut KEYPRESS_HANDLER: fn(DecodedKey) -> () = |_x: DecodedKey| {}; 
 

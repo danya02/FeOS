@@ -27,9 +27,8 @@ lazy_static!{
 
 fn keypress_handler(key: DecodedKey) {
     print!("{:?}", key);
-    let a = pc_speaker::Frequency::from_freq(*(FREQ.lock()));
     *(FREQ.lock()) += 50;
-    pc_speaker::write_freq(a);
+    pc_speaker::play_freq(*(FREQ.lock()));
     match key {
         DecodedKey::Unicode('a') => { pc_speaker::connect(); print!("ON"); },
         _ => { pc_speaker::disconnect(); print!("OFF"); },
@@ -50,6 +49,8 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     unsafe {
         interrupts::KEYPRESS_HANDLER = keypress_handler;
     }
+
+    interrupts::timer0_write_freq(interrupts::Frequency::from_freq(1000));
 
     println!("Boot info: {:?}", boot_info);
 
