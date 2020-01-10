@@ -28,3 +28,4 @@ features = ["spin_no_std"]
 
 [package.metadata.bootimage]
 default-target = "x86_64-fe_os.json"
+run-command = ["qemu-system-x86_64", "-drive", "format=raw,file={}", "-soundhw", "pcspk"]

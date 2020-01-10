@@ -7,16 +7,33 @@
 extern crate alloc;
 
 use alloc::{boxed::Box, rc::Rc, vec, vec::Vec};
-use fe_os::{println,print};
+use fe_os::{println, print};
 use bootloader::{entry_point, BootInfo};
 use core::panic::PanicInfo;
+
 
 entry_point!(kernel_main);
 
 use pc_keyboard::DecodedKey; 
 
+mod pc_speaker;
+
+use lazy_static::lazy_static;
+use spin::Mutex;
+
+lazy_static!{
+    static ref FREQ: Mutex<u32> = Mutex::new(440);
+}
+
 fn keypress_handler(key: DecodedKey) {
     print!("{:?}", key);
+    let a = pc_speaker::Frequency::from_freq(*(FREQ.lock()));
+    *(FREQ.lock()) += 50;
+    pc_speaker::write_freq(a);
+    match key {
+        DecodedKey::Unicode('a') => { pc_speaker::connect(); print!("ON"); },
+        _ => { pc_speaker::disconnect(); print!("OFF"); },
+    }
 }
 
 use fe_os::interrupts;
