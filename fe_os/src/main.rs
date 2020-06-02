@@ -22,16 +22,27 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 
 lazy_static!{
-    static ref FREQ: Mutex<u32> = Mutex::new(440);
+    static ref FREQ: Mutex<u32> = Mutex::new(400);
 }
 
 fn keypress_handler(key: DecodedKey) {
     print!("{:?}", key);
-    *(FREQ.lock()) += 50;
-    pc_speaker::play_freq(*(FREQ.lock()));
     match key {
-        DecodedKey::Unicode('a') => { pc_speaker::connect(); print!("ON"); },
-        _ => { pc_speaker::disconnect(); print!("OFF"); },
+        DecodedKey::Unicode('w') => {
+            *(FREQ.lock()) += 50;
+            pc_speaker::play_freq(*(FREQ.lock()));
+            pc_speaker::connect();
+            println!("{}", *(FREQ.lock()));
+        },
+        DecodedKey::Unicode('s') => {
+            *(FREQ.lock()) -= 50;
+            pc_speaker::play_freq(*(FREQ.lock()));
+            pc_speaker::connect();
+            println!("{}", *(FREQ.lock()));
+        },
+        _ => {
+            pc_speaker::disconnect();
+            println!("OFF"); },
     }
 }
 
@@ -50,7 +61,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
         interrupts::KEYPRESS_HANDLER = keypress_handler;
     }
 
-    interrupts::timer0_write_freq(interrupts::Frequency::from_freq(1000));
+    interrupts::timer0_write_freq(interrupts::Frequency::from_freq(100));
 
     println!("Boot info: {:?}", boot_info);
 
